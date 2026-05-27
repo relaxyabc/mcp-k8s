@@ -1,0 +1,60 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Go workspace file
+go.work
+go.work.sum
+
+# Dependency directories
+vendor/
+
+# Build output
+bin/
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# MCP config (local only)
+.mcp.json
+
+# Logs
+*.log
+logs/
+
+# Project specific
+.specify/
+.claude/
+specs/
+
+# Kubernetes secrets and kubeconfig
+*.kubeconfig
+kubeconfig*
+*.key
+*.crt
+secrets/
+kube.conf
