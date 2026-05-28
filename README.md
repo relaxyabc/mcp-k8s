@@ -13,15 +13,19 @@ Kubernetes 只读 MCP (Model Context Protocol) 服务器，通过 stdio 与 MCP 
 - 所有操作严格只读，禁止 create/update/delete
 - Secrets 数据自动脱敏
 - 禁止访问敏感目录 (/etc/secrets, /root, ~/.ssh)
+- Pod exec 仅允许：cat / tail / head / grep / ls
 
 ## 安装
 
 ```bash
-# 构建
+# 直接构建
 go build -o k8s-mcp ./cmd
 
-# 运行
-./k8s-mcp --kubeconfig ~/.kube/config
+# 使用 Makefile（含版本信息）
+make build
+
+# 发布构建（linux + windows）
+make release
 ```
 
 ## CLI 参数
@@ -85,7 +89,11 @@ rules:
 
 ## 技术栈
 
-- Go v1.25
-- urfave/cli v2.x
+- Go 1.25.7
+- urfave/cli v2.27.5
 - k8s.io/client-go v0.32.0
 - MCP stdio protocol (JSON-RPC 2.0)
+
+## 开发规范
+
+详见 [AGENTS.md](./AGENTS.md)

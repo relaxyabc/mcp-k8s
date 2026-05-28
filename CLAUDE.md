@@ -1,29 +1,7 @@
-﻿# mcp-k8s Development Guidelines
+# CLAUDE.md
 
-Auto-generated from all feature plans. Last updated: 2026-05-26
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Active Technologies
+**所有开发规范和约束请查阅 [AGENTS.md](./AGENTS.md)**
 
-- Go v1.25 (001-k8s-readonly-mcp)
-
-## Project Structure
-
-```text
-src/
-tests/
-```
-
-## Commands
-
-# Add commands for Go v1.25
-
-## Code Style
-
-Go v1.25: Follow standard conventions
-
-## Recent Changes
-
-- 001-k8s-readonly-mcp: Added Go v1.25
-
-<!-- MANUAL ADDITIONS START -->
-<!-- MANUAL ADDITIONS END -->
+> 注：本文件仅作为引用入口，不再修改。所有改动落地到 AGENTS.md。
