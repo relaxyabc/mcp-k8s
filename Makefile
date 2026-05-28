@@ -10,7 +10,7 @@ GOGET=$(GOCMD) get
 GOMOD=$(GOCMD) mod
 
 # Main package path
-MAIN_PACKAGE=./cmd/k8s-mcp
+MAIN_PACKAGE=./cmd
 
 # Build directory
 BUILD_DIR=./build

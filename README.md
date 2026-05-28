@@ -18,7 +18,7 @@ Kubernetes 只读 MCP (Model Context Protocol) 服务器，通过 stdio 与 MCP 
 
 ```bash
 # 构建
-go build -o k8s-mcp ./cmd/k8s-mcp
+go build -o k8s-mcp ./cmd
 
 # 运行
 ./k8s-mcp --kubeconfig ~/.kube/config
