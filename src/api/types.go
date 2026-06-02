@@ -6,12 +6,14 @@ import (
 
 // ListResourcesParams list_resources 工具参数
 type ListResourcesParams struct {
+	Cluster      string `json:"cluster,omitempty"`
 	ResourceType string `json:"resourceType"`
 	Namespace    string `json:"namespace,omitempty"`
 }
 
 // GetResourceParams get_resource 工具参数
 type GetResourceParams struct {
+	Cluster      string `json:"cluster,omitempty"`
 	ResourceType string `json:"resourceType"`
 	Namespace    string `json:"namespace"`
 	Name         string `json:"name"`
@@ -19,6 +21,7 @@ type GetResourceParams struct {
 
 // ReadPodLogsParams read_pod_logs 工具参数
 type ReadPodLogsParams struct {
+	Cluster        string `json:"cluster,omitempty"`
 	Namespace      string `json:"namespace"`
 	PodName        string `json:"podName"`
 	Container      string `json:"container,omitempty"`
@@ -80,6 +83,8 @@ const (
 	ErrTimeout             = "TIMEOUT"
 	ErrLogFileNotFound     = "LOG_FILE_NOT_FOUND"
 	ErrSensitivePathDenied = "SENSITIVE_PATH_DENIED"
+	ErrClusterNotFound     = "CLUSTER_NOT_FOUND"
+	ErrNamespaceForbidden  = "NAMESPACE_FORBIDDEN"
 )
 
 // NewSuccessResponse 创建成功的工具响应

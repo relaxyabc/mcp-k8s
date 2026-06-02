@@ -2,6 +2,7 @@
 
 ## 1. Project Overview
 - Kubernetes 只读 MCP (Model Context Protocol) 服务器，通过 stdio 与 MCP 客户端（如 Claude Code）通信
+- 支持**多集群配置**，通过 YAML/JSON 配置文件管理多个 K8s 集群
 - 提供 list_resources、get_resource、read_pod_logs 三个工具，供 AI Agent 安全地查询 K8s 集群状态
 - **不在本模块处理的内容**：任何 create/update/delete 操作、写文件、修改 K8s 资源
 
@@ -50,6 +51,8 @@
 cmd/            # 可执行程序入口
 src/api/        # API 类型定义（请求/响应结构体）
 src/audit/      # 审计日志器
+src/cluster/    # 集群管理器（多集群支持）
+src/config/     # 配置文件加载（YAML/JSON）
 src/k8s/        # Kubernetes 客户端、资源处理器、日志处理器
 src/logger/     # 开发日志器
 src/mcp/        # MCP 协议实现（server、registry、protocol）
@@ -58,7 +61,9 @@ tests/          # 测试（helpers、integration）
 ```
 
 核心入口：
-- `cmd/main.go` — CLI 入口，注册 MCP 工具
+- `cmd/main.go` — CLI 入口，注册 MCP 工具，多集群/单集群模式切换
+- `src/config/loader.go` — 配置文件加载，支持 YAML 和 JSON
+- `src/cluster/manager.go` — 集群管理器，namespace 白名单验证
 - `src/mcp/server.go` — MCP stdio 服务器核心
 - `src/security/readonly.go` — 只读命令白名单
 

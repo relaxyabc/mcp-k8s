@@ -12,6 +12,8 @@ import (
 
 	"github.com/relaxyabc/mcp-k8s/src/api"
 	"github.com/relaxyabc/mcp-k8s/src/audit"
+	"github.com/relaxyabc/mcp-k8s/src/cluster"
+	"github.com/relaxyabc/mcp-k8s/src/config"
 	"github.com/relaxyabc/mcp-k8s/src/k8s"
 	"github.com/relaxyabc/mcp-k8s/src/logger"
 	"github.com/relaxyabc/mcp-k8s/src/mcp"
@@ -34,26 +36,20 @@ func main() {
 		Version: Version,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
+				Name:    "config",
+				Aliases: []string{"c"},
+				Usage:   "配置文件路径 (JSON/YAML)，启用多集群模式",
+			},
+			&cli.StringFlag{
 				Name:    "kubeconfig",
 				Aliases: []string{"k"},
 				Value:   "~/.kube/config",
-				Usage:   "kubeconfig 文件路径",
+				Usage:   "kubeconfig 文件路径 (单集群模式)",
 			},
 			&cli.StringFlag{
 				Name:    "namespace",
 				Aliases: []string{"n"},
-				Usage:   "查询的默认命名空间",
-			},
-			&cli.StringFlag{
-				Name:    "log-level",
-				Aliases: []string{"l"},
-				Value:   "info",
-				Usage:   "日志级别: debug|info|warn|error",
-			},
-			&cli.StringFlag{
-				Name:    "log-file",
-				Aliases: []string{"f"},
-				Usage:   "审计日志文件路径（默认: stdout）",
+				Usage:   "查询的默认命名空间 (单集群模式)",
 			},
 		},
 		Action: func(ctx *cli.Context) error {
@@ -70,65 +66,97 @@ func main() {
 func runMCPServer(ctx *cli.Context, log *logger.Logger) error {
 	log.Info("启动 k8s-mcp 服务器")
 
-	// 解析日志级别
-	level := logger.Info
-	switch ctx.String("log-level") {
-	case "debug":
-		level = logger.Debug
-	case "warn":
-		level = logger.Warn
-	case "error":
-		level = logger.Error
-	}
+	var clusterMgr *cluster.Manager
+	var defaultNamespace string
+	var auditLogger *audit.Logger
 
-	// 设置审计日志器
-	output := os.Stdout
-	if ctx.String("log-file") != "" {
-		f, err := os.OpenFile(ctx.String("log-file"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	// 检测运行模式
+	configPath := ctx.String("config")
+	if configPath != "" {
+		// 多集群模式
+		log.Info("使用配置文件模式", "path", configPath)
+		cfg, err := config.Load(configPath)
 		if err != nil {
-			log.Error("打开日志文件失败", "error", err)
-			return fmt.Errorf("打开日志文件失败: %w", err)
+			log.Error("加载配置文件失败", "error", err)
+			return fmt.Errorf("加载配置文件失败: %w", err)
 		}
-		output = f
+		log.Info("配置文件加载成功", "clusters", len(cfg.Clusters), "default", cfg.DefaultCluster)
+
+		// 创建集群管理器
+		clusterMgr, err = cluster.NewManager(cfg)
+		if err != nil {
+			log.Error("创建集群管理器失败", "error", err)
+			return fmt.Errorf("创建集群管理器失败: %w", err)
+		}
+		log.Info("集群管理器创建成功", "clusters", clusterMgr.ListClusters())
+
+		// 设置审计日志器 (从配置文件读取)
+		level := logger.Info
+		switch cfg.GetLogLevel() {
+		case "debug":
+			level = logger.Debug
+		case "warn":
+			level = logger.Warn
+		case "error":
+			level = logger.Error
+		}
+		output := os.Stdout
+		if cfg.GetLogFile() != "" {
+			f, err := os.OpenFile(cfg.GetLogFile(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+			if err != nil {
+				log.Error("打开日志文件失败", "error", err)
+				return fmt.Errorf("打开日志文件失败: %w", err)
+			}
+			output = f
+		}
+		auditLogger = audit.NewLogger(level, output)
+		log.Info("审计日志器已初始化", "level", cfg.GetLogLevel(), "file", cfg.GetLogFile())
+
+		// 警告：忽略单集群参数
+		if ctx.String("kubeconfig") != "~/.kube/config" {
+			log.Warn("多集群模式下 --kubeconfig 参数被忽略")
+		}
+		if ctx.String("namespace") != "" {
+			log.Warn("多集群模式下 --namespace 参数被忽略")
+		}
+	} else {
+		// 单集群模式 (向后兼容)
+		log.Info("使用单集群模式 (向后兼容)")
+		kubeconfigPath := ctx.String("kubeconfig")
+		log.Info("加载 kubeconfig", "path", kubeconfigPath)
+		restConfig, err := k8s.LoadKubeconfig(kubeconfigPath)
+		if err != nil {
+			log.Error("加载 kubeconfig 失败", "error", err)
+			return fmt.Errorf("加载 kubeconfig 失败: %w", err)
+		}
+		log.Info("kubeconfig 加载成功")
+
+		// 创建单个 Kubernetes 客户端
+		client, err := k8s.NewClient(restConfig)
+		if err != nil {
+			log.Error("创建 K8s 客户端失败", "error", err)
+			return fmt.Errorf("创建 Kubernetes 客户端失败: %w", err)
+		}
+		log.Info("Kubernetes 客户端创建成功")
+
+		// 使用单集群管理器
+		defaultNamespace = ctx.String("namespace")
+		if defaultNamespace == "" {
+			defaultNamespace = "default"
+		}
+		clusterMgr = cluster.NewSingleClusterManager(client, kubeconfigPath, defaultNamespace)
+
+		// 单集群模式使用默认日志配置
+		auditLogger = audit.NewLogger(logger.Info, os.Stdout)
+		log.Info("审计日志器已初始化", "level", "info")
 	}
-	auditLogger := audit.NewLogger(level, output)
-	log.Info("审计日志器已初始化", "level", ctx.String("log-level"))
-
-	// 加载 kubeconfig
-	kubeconfigPath := ctx.String("kubeconfig")
-	log.Info("加载 kubeconfig", "path", kubeconfigPath)
-	config, err := k8s.LoadKubeconfig(kubeconfigPath)
-	if err != nil {
-		log.Error("加载 kubeconfig 失败", "error", err)
-		auditLogger.LogError("startup", fmt.Sprintf("加载 kubeconfig 失败: %v", err))
-		return fmt.Errorf("加载 kubeconfig 失败: %w", err)
-	}
-	log.Info("kubeconfig 加载成功")
-
-	// 创建 Kubernetes 客户端
-	log.Debug("创建 Kubernetes 客户端")
-	client, err := k8s.NewClient(config)
-	if err != nil {
-		log.Error("创建 K8s 客户端失败", "error", err)
-		auditLogger.LogError("startup", fmt.Sprintf("创建 K8s 客户端失败: %v", err))
-		return fmt.Errorf("创建 Kubernetes 客户端失败: %w", err)
-	}
-	log.Info("Kubernetes 客户端创建成功")
-
-	// 创建资源处理器
-	resourceHandler := k8s.NewResourceHandler(client)
-	log.Debug("资源处理器已创建")
-
-	// 创建日志处理器
-	logHandler := k8s.NewLogHandler(client)
-	log.Debug("日志处理器已创建")
 
 	// 创建工具注册器
 	registry := mcp.NewRegistry()
 	log.Debug("MCP 注册器已创建")
 
 	// 注册 MCP 工具
-	registerTools(registry, resourceHandler, logHandler, auditLogger)
+	registerToolsWithCluster(registry, clusterMgr, auditLogger, defaultNamespace)
 	log.Info("MCP 工具已注册")
 
 	// 创建 MCP 服务器
@@ -150,16 +178,21 @@ func runMCPServer(ctx *cli.Context, log *logger.Logger) error {
 	}()
 
 	// 启动服务器
-	log.Info("启动 MCP stdio 服务器", "kubeconfig", kubeconfigPath)
+	if configPath != "" {
+		log.Info("启动 MCP stdio 服务器 (多集群模式)", "config", configPath)
+	} else {
+		log.Info("启动 MCP stdio 服务器 (单集群模式)", "kubeconfig", ctx.String("kubeconfig"))
+	}
 	return server.Start(serverCtx)
 }
 
-// registerTools 注册所有 MCP 工具到注册器
-func registerTools(registry *mcp.Registry, resourceHandler *k8s.ResourceHandler, logHandler *k8s.LogHandler, auditLogger *audit.Logger) {
+// registerToolsWithCluster 注册所有 MCP 工具到注册器 (支持多集群)
+func registerToolsWithCluster(registry *mcp.Registry, clusterMgr *cluster.Manager, auditLogger *audit.Logger, defaultNamespace string) {
 	// 注册 list_resources 工具
 	listResourcesSchema := json.RawMessage(`{
 		"type": "object",
 		"properties": {
+			"cluster": {"type": "string", "description": "集群名称 (可选，默认使用 defaultCluster)"},
 			"resourceType": {"type": "string", "enum": ["pods", "deployments", "services", "jobs", "configmaps", "namespaces"]},
 			"namespace": {"type": "string", "description": "目标 namespace (namespace 资源类型时忽略此参数)"}
 		},
@@ -170,13 +203,14 @@ func registerTools(registry *mcp.Registry, resourceHandler *k8s.ResourceHandler,
 		"list_resources",
 		"列出 Kubernetes 资源 (仅只读)。支持: pods, deployments, services, jobs, configmaps, namespaces",
 		listResourcesSchema,
-		makeListResourcesHandler(resourceHandler, auditLogger),
+		makeListResourcesHandlerWithCluster(clusterMgr, auditLogger, defaultNamespace),
 	)
 
 	// 注册 get_resource 工具
 	getResourceSchema := json.RawMessage(`{
 		"type": "object",
 		"properties": {
+			"cluster": {"type": "string", "description": "集群名称 (可选)"},
 			"resourceType": {"type": "string", "enum": ["pod", "deployment", "service", "job", "configmap", "secret"]},
 			"namespace": {"type": "string"},
 			"name": {"type": "string"}
@@ -188,13 +222,14 @@ func registerTools(registry *mcp.Registry, resourceHandler *k8s.ResourceHandler,
 		"get_resource",
 		"获取 Kubernetes 资源详情 (仅只读)。自动脱敏 secrets",
 		getResourceSchema,
-		makeGetResourceHandler(resourceHandler, auditLogger),
+		makeGetResourceHandlerWithCluster(clusterMgr, auditLogger, defaultNamespace),
 	)
 
 	// 注册 read_pod_logs 工具
 	readPodLogsSchema := json.RawMessage(`{
 		"type": "object",
 		"properties": {
+			"cluster": {"type": "string", "description": "集群名称 (可选)"},
 			"namespace": {"type": "string"},
 			"podName": {"type": "string"},
 			"container": {"type": "string"},
@@ -213,12 +248,12 @@ func registerTools(registry *mcp.Registry, resourceHandler *k8s.ResourceHandler,
 		"read_pod_logs",
 		"进入 Pod 容器读取日志文件 (仅只读)。支持管道组合: tail | grep, cat | grep",
 		readPodLogsSchema,
-		makeReadPodLogsHandler(logHandler, auditLogger),
+		makeReadPodLogsHandlerWithCluster(clusterMgr, auditLogger, defaultNamespace),
 	)
 }
 
-// makeListResourcesHandler 创建 list_resources 工具处理器
-func makeListResourcesHandler(handler *k8s.ResourceHandler, auditLogger *audit.Logger) mcp.ToolHandler {
+// makeListResourcesHandlerWithCluster 创建 list_resources 工具处理器 (支持多集群)
+func makeListResourcesHandlerWithCluster(clusterMgr *cluster.Manager, auditLogger *audit.Logger, defaultNamespace string) mcp.ToolHandler {
 	return func(ctx context.Context, params json.RawMessage) (any, error) {
 		start := time.Now()
 
@@ -229,7 +264,35 @@ func makeListResourcesHandler(handler *k8s.ResourceHandler, auditLogger *audit.L
 			return api.NewErrorResponse(api.ErrInvalidInput, "参数无效"), nil
 		}
 
-		// 验证资源类型
+		// 获取集群
+		loadedCluster, err := clusterMgr.GetCluster(p.Cluster)
+		if err != nil {
+			auditLogger.LogError("list_resources", err.Error())
+			return api.NewErrorResponse(api.ErrClusterNotFound, fmt.Sprintf("%v。可用集群: %v", err, clusterMgr.ListClusters())), nil
+		}
+
+		// 创建资源处理器
+		k8sClient, ok := loadedCluster.Client.(*k8s.Client)
+		if !ok {
+			return api.NewErrorResponse(api.ErrInternal, "客户端类型错误"), nil
+		}
+		handler := k8s.NewResourceHandler(k8sClient)
+
+		// 确定 namespace
+		ns := p.Namespace
+		if ns == "" {
+			ns = defaultNamespace
+		}
+
+		// 验证 namespace 访问权限 (namespace 类型不需要验证)
+		if p.ResourceType != "namespaces" {
+			if err := clusterMgr.ValidateNamespace(p.Cluster, ns); err != nil {
+				auditLogger.LogError("list_resources", err.Error())
+				return api.NewErrorResponse(api.ErrNamespaceForbidden, err.Error()), nil
+			}
+		}
+
+		// 执行查询
 		var result []api.ResourceSummary
 		var listErr error
 
@@ -237,34 +300,14 @@ func makeListResourcesHandler(handler *k8s.ResourceHandler, auditLogger *audit.L
 		case "namespaces":
 			result, listErr = handler.ListNamespaces(ctx)
 		case "pods":
-			ns := p.Namespace
-			if ns == "" {
-				ns = "default"
-			}
 			result, listErr = handler.ListPods(ctx, ns)
 		case "deployments":
-			ns := p.Namespace
-			if ns == "" {
-				ns = "default"
-			}
 			result, listErr = handler.ListDeployments(ctx, ns)
 		case "services":
-			ns := p.Namespace
-			if ns == "" {
-				ns = "default"
-			}
 			result, listErr = handler.ListServices(ctx, ns)
 		case "jobs":
-			ns := p.Namespace
-			if ns == "" {
-				ns = "default"
-			}
 			result, listErr = handler.ListJobs(ctx, ns)
 		case "configmaps":
-			ns := p.Namespace
-			if ns == "" {
-				ns = "default"
-			}
 			result, listErr = handler.ListConfigMaps(ctx, ns)
 		default:
 			return api.NewErrorResponse(api.ErrInvalidInput, fmt.Sprintf("未知资源类型: %s", p.ResourceType)), nil
@@ -284,8 +327,8 @@ func makeListResourcesHandler(handler *k8s.ResourceHandler, auditLogger *audit.L
 	}
 }
 
-// makeGetResourceHandler 创建 get_resource 工具处理器
-func makeGetResourceHandler(handler *k8s.ResourceHandler, auditLogger *audit.Logger) mcp.ToolHandler {
+// makeGetResourceHandlerWithCluster 创建 get_resource 工具处理器 (支持多集群)
+func makeGetResourceHandlerWithCluster(clusterMgr *cluster.Manager, auditLogger *audit.Logger, defaultNamespace string) mcp.ToolHandler {
 	return func(ctx context.Context, params json.RawMessage) (any, error) {
 		start := time.Now()
 
@@ -300,6 +343,26 @@ func makeGetResourceHandler(handler *k8s.ResourceHandler, auditLogger *audit.Log
 		if p.ResourceType == "" || p.Namespace == "" || p.Name == "" {
 			return api.NewErrorResponse(api.ErrInvalidInput, "resourceType, namespace 和 name 是必填字段"), nil
 		}
+
+		// 获取集群
+		loadedCluster, err := clusterMgr.GetCluster(p.Cluster)
+		if err != nil {
+			auditLogger.LogError("get_resource", err.Error())
+			return api.NewErrorResponse(api.ErrClusterNotFound, fmt.Sprintf("%v。可用集群: %v", err, clusterMgr.ListClusters())), nil
+		}
+
+		// 验证 namespace 访问权限
+		if err := clusterMgr.ValidateNamespace(p.Cluster, p.Namespace); err != nil {
+			auditLogger.LogError("get_resource", err.Error())
+			return api.NewErrorResponse(api.ErrNamespaceForbidden, err.Error()), nil
+		}
+
+		// 创建资源处理器
+		k8sClient, ok := loadedCluster.Client.(*k8s.Client)
+		if !ok {
+			return api.NewErrorResponse(api.ErrInternal, "客户端类型错误"), nil
+		}
+		handler := k8s.NewResourceHandler(k8sClient)
 
 		var result any
 		var getErr error
@@ -318,7 +381,6 @@ func makeGetResourceHandler(handler *k8s.ResourceHandler, auditLogger *audit.Log
 			if err != nil {
 				getErr = err
 			} else {
-				// 脱敏 ConfigMap
 				result = security.SanitizeConfigMap(cm)
 			}
 		case "secret":
@@ -326,7 +388,6 @@ func makeGetResourceHandler(handler *k8s.ResourceHandler, auditLogger *audit.Log
 			if err != nil {
 				getErr = err
 			} else {
-				// 脱敏 Secret - 隐藏所有数据
 				result = security.SanitizeSecret(secret)
 			}
 		default:
@@ -336,7 +397,6 @@ func makeGetResourceHandler(handler *k8s.ResourceHandler, auditLogger *audit.Log
 		// 处理错误
 		if getErr != nil {
 			auditLogger.LogError("get_resource", getErr.Error())
-			// 检查是否为未找到错误
 			if isNotFoundError(getErr) {
 				return api.NewErrorResponse(api.ErrNotFound, getErr.Error()), nil
 			}
@@ -351,18 +411,8 @@ func makeGetResourceHandler(handler *k8s.ResourceHandler, auditLogger *audit.Log
 	}
 }
 
-// isNotFoundError 检查错误是否为 Kubernetes 未找到错误
-func isNotFoundError(err error) bool {
-	return err != nil && (err.Error() == "not found" || containsNotFound(err.Error()))
-}
-
-// containsNotFound 检查字符串是否包含 "not found" 模式
-func containsNotFound(s string) bool {
-	return len(s) > 0 && (s == "not found" || (len(s) >= 10 && s[len(s)-10:] == "not found"))
-}
-
-// makeReadPodLogsHandler 创建 read_pod_logs 工具处理器
-func makeReadPodLogsHandler(handler *k8s.LogHandler, auditLogger *audit.Logger) mcp.ToolHandler {
+// makeReadPodLogsHandlerWithCluster 创建 read_pod_logs 工具处理器 (支持多集群)
+func makeReadPodLogsHandlerWithCluster(clusterMgr *cluster.Manager, auditLogger *audit.Logger, defaultNamespace string) mcp.ToolHandler {
 	return func(ctx context.Context, params json.RawMessage) (any, error) {
 		start := time.Now()
 
@@ -377,6 +427,26 @@ func makeReadPodLogsHandler(handler *k8s.LogHandler, auditLogger *audit.Logger) 
 		if p.Namespace == "" || p.PodName == "" || p.LogDir == "" || p.LogFile == "" {
 			return api.NewErrorResponse(api.ErrInvalidInput, "namespace, podName, logDir 和 logFile 是必填字段"), nil
 		}
+
+		// 获取集群
+		loadedCluster, err := clusterMgr.GetCluster(p.Cluster)
+		if err != nil {
+			auditLogger.LogError("read_pod_logs", err.Error())
+			return api.NewErrorResponse(api.ErrClusterNotFound, fmt.Sprintf("%v。可用集群: %v", err, clusterMgr.ListClusters())), nil
+		}
+
+		// 验证 namespace 访问权限
+		if err := clusterMgr.ValidateNamespace(p.Cluster, p.Namespace); err != nil {
+			auditLogger.LogError("read_pod_logs", err.Error())
+			return api.NewErrorResponse(api.ErrNamespaceForbidden, err.Error()), nil
+		}
+
+		// 创建日志处理器
+		k8sClient, ok := loadedCluster.Client.(*k8s.Client)
+		if !ok {
+			return api.NewErrorResponse(api.ErrInternal, "客户端类型错误"), nil
+		}
+		handler := k8s.NewLogHandler(k8sClient)
 
 		// 构建完整日志路径
 		logPath := p.LogDir + "/" + p.LogFile
@@ -424,11 +494,9 @@ func makeReadPodLogsHandler(handler *k8s.LogHandler, auditLogger *audit.Logger) 
 		// 处理错误
 		if readErr != nil {
 			auditLogger.LogError("read_pod_logs", readErr.Error())
-			// 检查是否为禁止路径
 			if strings.Contains(readErr.Error(), "因安全原因被禁止访问") {
 				return api.NewErrorResponse(api.ErrSensitivePathDenied, readErr.Error()), nil
 			}
-			// 检查是否为未找到
 			if isNotFoundError(readErr) || strings.Contains(readErr.Error(), "no such file") {
 				return api.NewErrorResponse(api.ErrLogFileNotFound, readErr.Error()), nil
 			}
@@ -441,4 +509,14 @@ func makeReadPodLogsHandler(handler *k8s.LogHandler, auditLogger *audit.Logger) 
 
 		return api.NewSuccessResponse(result), nil
 	}
+}
+
+// isNotFoundError 检查错误是否为 Kubernetes 未找到错误
+func isNotFoundError(err error) bool {
+	return err != nil && (err.Error() == "not found" || containsNotFound(err.Error()))
+}
+
+// containsNotFound 检查字符串是否包含 "not found" 模式
+func containsNotFound(s string) bool {
+	return len(s) > 0 && (s == "not found" || (len(s) >= 10 && s[len(s)-10:] == "not found"))
 }

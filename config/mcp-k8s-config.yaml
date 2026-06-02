@@ -1,0 +1,38 @@
+# MCP-K8s 多集群配置示例
+# 版本: 1.0
+
+# 默认集群 (可选，不指定时使用第一个集群)
+defaultCluster: "dev-cluster"
+
+# 日志配置 (可选)
+logging:
+  level: "info"            # debug|info|warn|error
+  file: ""                 # 日志文件路径，空表示输出到 stdout
+
+# 集群配置列表
+clusters:
+  # 开发集群
+  - name: "dev-cluster"
+    kubeconfig: "~/.kube/dev-config"
+    description: "开发环境 Kubernetes 集群"
+    # 允许访问的 namespace 列表 (可选)
+    # 空数组或不设置表示允许所有 namespace
+    allowedNamespaces:
+      - "default"
+      - "dev"
+      - "testing"
+
+  # 生产集群 (只读访问)
+  - name: "prod-cluster"
+    kubeconfig: "~/.kube/prod-config"
+    description: "生产环境 Kubernetes 集群"
+    # 限制只能访问特定 namespace
+    allowedNamespaces:
+      - "monitoring"
+      - "logging"
+
+  # 测试集群 (无 namespace 限制)
+  - name: "test-cluster"
+    kubeconfig: "~/.kube/test-config"
+    description: "测试环境"
+    # 不设置 allowedNamespaces 表示允许所有 namespace

@@ -58,3 +58,5 @@ kubeconfig*
 *.crt
 secrets/
 kube.conf
+console.conf
+mcp-multi-k8s.yaml

@@ -1,10 +1,12 @@
 # K8s MCP Server
 
-Kubernetes 只读 MCP (Model Context Protocol) 服务器，通过 stdio 与 MCP 客户端通信。
+Kubernetes 只读 MCP (Model Context Protocol) 服务器，支持多集群配置，通过 stdio 与 MCP 客户端通信。
 
 ## 功能
 
-- **list_resources**: 列出 Kubernetes 资源
+- **多集群支持**: 通过配置文件管理多个 Kubernetes 集群
+- **namespace 白名单**: 对每个集群限制可访问的 namespace
+- **list_resources**: 列出 Kubernetes 资源 (pods, deployments, services, jobs, configmaps, namespaces)
 - **get_resource**: 获取资源详情 (自动脱敏 secrets)
 - **read_pod_logs**: 进入 Pod 读取日志文件 (支持 tail | grep 管道组合)
 
@@ -28,25 +30,94 @@ make build
 make release
 ```
 
+## 使用方式
+
+### 多集群模式（推荐）
+
+通过配置文件管理多个集群：
+
+```bash
+k8s-mcp --config mcp-k8s-config.yaml
+```
+
+配置文件格式 (YAML):
+
+```yaml
+# 默认集群
+defaultCluster: "dev-cluster"
+
+# 日志配置
+logging:
+  level: "info"            # debug|info|warn|error
+  file: "/var/log/mcp-k8s/audit.log"  # 可选，默认 stdout
+
+# 集群列表
+clusters:
+  - name: "dev-cluster"
+    kubeconfig: "~/.kube/dev-config"
+    description: "开发集群"
+    allowedNamespaces:     # 可选，空数组表示允许所有 namespace
+      - "default"
+      - "dev"
+
+  - name: "prod-cluster"
+    kubeconfig: "~/.kube/prod-config"
+    description: "生产集群"
+    allowedNamespaces:
+      - "monitoring"
+```
+
+### 单集群模式（向后兼容）
+
+```bash
+k8s-mcp --kubeconfig ~/.kube/config --namespace default
+```
+
 ## CLI 参数
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
-| --kubeconfig, -k | ~/.kube/config | kubeconfig 文件路径 |
-| --namespace, -n | (empty) | 默认 namespace |
-| --log-level, -l | info | 日志级别: debug/info/warn/error |
-| --log-file, -f | stdout | 审计日志输出路径 |
+| --config, -c | - | 配置文件路径 (YAML/JSON)，启用多集群模式 |
+| --kubeconfig, -k | ~/.kube/config | kubeconfig 文件路径 (单集群模式) |
+| --namespace, -n | default | 默认 namespace (单集群模式) |
+
+## MCP 工具参数
+
+所有工具新增可选 `cluster` 参数，用于指定目标集群：
+
+```json
+{
+  "cluster": "dev-cluster",      // 可选，未指定时使用 defaultCluster
+  "resourceType": "pods",
+  "namespace": "default"
+}
+```
 
 ## MCP 客户端配置
 
 ### Claude Code
 
+**多集群模式:**
+
 ```json
 {
   "mcpServers": {
-    "k8s-readonly": {
+    "k8s-mcp": {
       "command": "/path/to/k8s-mcp",
-      "args": ["--kubeconfig", "/path/to/kubeconfig"]
+      "args": ["--config", "/path/to/mcp-k8s-config.yaml"]
+    }
+  }
+}
+```
+
+**单集群模式:**
+
+```json
+{
+  "mcpServers": {
+    "k8s-mcp": {
+      "command": "/path/to/k8s-mcp",
+      "args": ["--kubeconfig", "/path/to/kubeconfig", "--namespace", "default"]
     }
   }
 }
@@ -55,8 +126,11 @@ make release
 ## 使用示例
 
 ```
-# 列出 pods
+# 列出 pods (默认集群)
 "列出 default namespace 下的所有 pods"
+
+# 指定集群
+"列出 dev-cluster 集群的 pods"
 
 # 获取 pod 详情
 "查看 pod nginx-pod 的详细信息"
@@ -66,9 +140,6 @@ make release
 
 # 管道组合
 "读取 pod app-server 的 info.log，过滤包含 ERROR 的行"
-
-# 实时跟随
-"实时跟随 pod app-server 的 info.log，过滤 Connection 关键词，持续 15 秒"
 ```
 
 ## RBAC 要求
@@ -92,6 +163,7 @@ rules:
 - Go 1.25.7
 - urfave/cli v2.27.5
 - k8s.io/client-go v0.32.0
+- gopkg.in/yaml.v3
 - MCP stdio protocol (JSON-RPC 2.0)
 
 ## 开发规范
