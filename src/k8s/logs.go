@@ -27,6 +27,10 @@ func NewLogHandler(client *Client) *LogHandler {
 
 // ExecCommand 在 Pod 中执行 shell 命令（公共方法，供 exec_in_pod 使用）
 func (h *LogHandler) ExecCommand(ctx context.Context, namespace, podName, container, shellCmd string) (string, string, error) {
+	// 添加默认超时（30秒），防止命令无限阻塞
+	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
 	// 构建 exec URL
 	execURL, err := h.buildExecURL(namespace, podName, container, []string{"sh", "-c", shellCmd})
 	if err != nil {
@@ -40,10 +44,15 @@ func (h *LogHandler) ExecCommand(ctx context.Context, namespace, podName, contai
 	}
 
 	var stdout, stderr bytes.Buffer
-	err = executor.StreamWithContext(ctx, remotecommand.StreamOptions{
+	err = executor.StreamWithContext(timeoutCtx, remotecommand.StreamOptions{
 		Stdout: &stdout,
 		Stderr: &stderr,
 	})
+
+	// 处理超时错误
+	if errors.Is(timeoutCtx.Err(), context.DeadlineExceeded) {
+		return stdout.String(), stderr.String(), fmt.Errorf("命令执行超时 (30秒)")
+	}
 
 	return stdout.String(), stderr.String(), err
 }
