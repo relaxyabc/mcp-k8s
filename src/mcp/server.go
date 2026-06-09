@@ -155,14 +155,14 @@ func (s *Server) handleRequest(ctx context.Context, req *Request) *Response {
 
 // handleToolCall 执行工具调用
 func (s *Server) handleToolCall(ctx context.Context, req *Request) *Response {
-	s.log.Debug("handleToolCall: parsing params")
+	s.log.Info("handleToolCall: 开始处理", "requestId", req.ID)
 	// 解析工具调用参数
 	var params struct {
 		Name      string          `json:"name"`
 		Arguments json.RawMessage `json:"arguments"`
 	}
 	if err := json.Unmarshal(req.Params, &params); err != nil {
-		s.log.Error("handleToolCall: invalid params", "error", err)
+		s.log.Error("handleToolCall: 解析参数失败", "error", err)
 		return &Response{
 			Jsonrpc: JSONRPCVersion,
 			Error:   &Error{Code: -32602, Message: "Invalid params"},
@@ -170,12 +170,12 @@ func (s *Server) handleToolCall(ctx context.Context, req *Request) *Response {
 		}
 	}
 
-	s.log.Debug("handleToolCall: tool execution started", "tool", params.Name, "arguments", string(params.Arguments))
+	s.log.Info("handleToolCall: 开始执行工具", "tool", params.Name, "arguments", string(params.Arguments))
 
 	// 执行工具
 	result, err := s.registry.Execute(ctx, params.Name, params.Arguments)
 	if err != nil {
-		s.log.Error("handleToolCall: execution error", "error", err)
+		s.log.Error("handleToolCall: 执行失败", "error", err)
 		if e, ok := err.(*Error); ok {
 			return &Response{
 				Jsonrpc: JSONRPCVersion,
@@ -190,11 +190,11 @@ func (s *Server) handleToolCall(ctx context.Context, req *Request) *Response {
 		}
 	}
 
-	s.log.Debug("handleToolCall: execution success")
+	s.log.Info("handleToolCall: 执行成功", "requestId", req.ID)
 	// 序列化结果为 JSON
 	resultJSON, marshalErr := json.Marshal(result)
 	if marshalErr != nil {
-		s.log.Error("handleToolCall: JSON marshal error", "error", marshalErr)
+		s.log.Error("handleToolCall: JSON 序列化失败", "error", marshalErr)
 		resultJSON = []byte(fmt.Sprintf("%v", result))
 	}
 	resultBytes, _ := json.Marshal(map[string]any{
@@ -205,6 +205,7 @@ func (s *Server) handleToolCall(ctx context.Context, req *Request) *Response {
 			},
 		},
 	})
+	s.log.Info("handleToolCall: 返回响应", "requestId", req.ID)
 	return &Response{
 		Jsonrpc: JSONRPCVersion,
 		Result:  resultBytes,
