@@ -26,29 +26,6 @@ func MakeListResourcesHandler(clusterMgr *cluster.Manager, auditLogger *audit.Lo
 			return api.NewErrorResponse(api.ErrInvalidInput, "参数无效"), nil
 		}
 
-		// 特权模式确认流程
-		if security.PrivilegedMode {
-			if !p.Confirmed {
-				message := fmt.Sprintf("特权模式：即将列出 %s 资源 (namespace: %s)", p.ResourceType, p.Namespace)
-				op := security.CreateConfirmation("list_resources", p, message)
-				return api.NewConfirmationResponse(op.ID, p, message), nil
-			}
-			// 验证确认
-			if _, ok := security.ValidateConfirmation(p.OperationID); !ok {
-				return api.NewErrorResponse(api.ErrConfirmationExpired, "操作未确认或已过期，请重新发起请求"), nil
-			}
-			// 记录审计日志
-			defer auditLogger.LogPrivilegedOperation(ctx, &audit.PrivilegedOp{
-				Type:      "list_resources",
-				Resource:  p.ResourceType,
-				Namespace: p.Namespace,
-				Cluster:   p.Cluster,
-				Details:   p,
-				Confirmed: true,
-				Status:    "success",
-			})
-		}
-
 		// 获取集群
 		loadedCluster, err := clusterMgr.GetCluster(p.Cluster)
 		if err != nil {

@@ -31,29 +31,6 @@ func MakeGetResourceHandler(clusterMgr *cluster.Manager, auditLogger *audit.Logg
 			return api.NewErrorResponse(api.ErrInvalidInput, "resourceType, namespace 和 name 是必填字段"), nil
 		}
 
-		// 特权模式确认流程
-		if security.PrivilegedMode {
-			if !p.Confirmed {
-				message := fmt.Sprintf("特权模式：即将获取 %s/%s 详情 (namespace: %s)", p.ResourceType, p.Name, p.Namespace)
-				op := security.CreateConfirmation("get_resource", p, message)
-				return api.NewConfirmationResponse(op.ID, p, message), nil
-			}
-			// 验证确认
-			if _, ok := security.ValidateConfirmation(p.OperationID); !ok {
-				return api.NewErrorResponse(api.ErrConfirmationExpired, "操作未确认或已过期，请重新发起请求"), nil
-			}
-			// 记录审计日志
-			defer auditLogger.LogPrivilegedOperation(ctx, &audit.PrivilegedOp{
-				Type:      "get_resource",
-				Resource:  p.Name,
-				Namespace: p.Namespace,
-				Cluster:   p.Cluster,
-				Details:   p,
-				Confirmed: true,
-				Status:    "success",
-			})
-		}
-
 		// 获取集群
 		loadedCluster, err := clusterMgr.GetCluster(p.Cluster)
 		if err != nil {

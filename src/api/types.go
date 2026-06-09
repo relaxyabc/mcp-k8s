@@ -9,8 +9,6 @@ type ListResourcesParams struct {
 	Cluster      string `json:"cluster,omitempty"`
 	ResourceType string `json:"resourceType"`
 	Namespace    string `json:"namespace,omitempty"`
-	Confirmed    bool   `json:"confirmed,omitempty"`    // 特权模式：用户已确认
-	OperationID  string `json:"operationId,omitempty"`  // 特权模式：待确认操作ID
 }
 
 // GetResourceParams get_resource 工具参数
@@ -19,8 +17,6 @@ type GetResourceParams struct {
 	ResourceType string `json:"resourceType"`
 	Namespace    string `json:"namespace"`
 	Name         string `json:"name"`
-	Confirmed    bool   `json:"confirmed,omitempty"`    // 特权模式：用户已确认
-	OperationID  string `json:"operationId,omitempty"`  // 特权模式：待确认操作ID
 }
 
 // ReadPodLogsParams read_pod_logs 工具参数
@@ -36,8 +32,17 @@ type ReadPodLogsParams struct {
 	Pattern        string `json:"pattern,omitempty"`
 	Follow         bool   `json:"follow,omitempty"`
 	FollowDuration int    `json:"followDuration,omitempty"`
-	Confirmed      bool   `json:"confirmed,omitempty"`    // 特权模式：用户已确认
-	OperationID    string `json:"operationId,omitempty"`  // 特权模式：待确认操作ID
+}
+
+// ExecInPodParams exec_in_pod 工具参数（特权模式专用）
+type ExecInPodParams struct {
+	Cluster      string `json:"cluster,omitempty"`
+	Namespace    string `json:"namespace"`
+	PodName      string `json:"podName"`
+	Container    string `json:"container,omitempty"`
+	Command      string `json:"command"`
+	Confirmed    bool   `json:"confirmed,omitempty"`   // 用户已确认
+	OperationID  string `json:"operationId,omitempty"` // 待确认操作ID
 }
 
 // ResourceSummary 列表结果中的资源摘要
@@ -64,6 +69,16 @@ type LogContent struct {
 	Truncated  bool     `json:"truncated,omitempty"`
 	FilePath   string   `json:"filePath"`
 	Followed   bool     `json:"followed,omitempty"`
+}
+
+// ExecInPodResult exec_in_pod 执行结果
+type ExecInPodResult struct {
+	Stdout     string `json:"stdout"`
+	Stderr     string `json:"stderr,omitempty"`
+	Command    string `json:"command"`
+	PodName    string `json:"podName"`
+	Container  string `json:"container"`
+	ExitStatus string `json:"exitStatus,omitempty"`
 }
 
 // ToolResponse 标准 MCP 工具响应

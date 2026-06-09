@@ -25,6 +25,29 @@ func NewLogHandler(client *Client) *LogHandler {
 	return &LogHandler{client: client}
 }
 
+// ExecCommand 在 Pod 中执行 shell 命令（公共方法，供 exec_in_pod 使用）
+func (h *LogHandler) ExecCommand(ctx context.Context, namespace, podName, container, shellCmd string) (string, string, error) {
+	// 构建 exec URL
+	execURL, err := h.buildExecURL(namespace, podName, container, []string{"sh", "-c", shellCmd})
+	if err != nil {
+		return "", "", err
+	}
+
+	// 创建 SPDY executor
+	executor, err := remotecommand.NewSPDYExecutor(h.client.Config(), "POST", execURL)
+	if err != nil {
+		return "", "", fmt.Errorf("创建 SPDY 执行器失败: %w", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	err = executor.StreamWithContext(ctx, remotecommand.StreamOptions{
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+
+	return stdout.String(), stderr.String(), err
+}
+
 // buildExecURL 构建完整的 exec URL，确保参数正确传递
 func (h *LogHandler) buildExecURL(namespace, podName, container string, command []string) (*url.URL, error) {
 	restClient := h.client.Clientset().CoreV1().RESTClient()
