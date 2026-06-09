@@ -13,6 +13,7 @@ import (
 	"github.com/relaxyabc/mcp-k8s/src/k8s"
 	"github.com/relaxyabc/mcp-k8s/src/logger"
 	"github.com/relaxyabc/mcp-k8s/src/mcp"
+	"github.com/relaxyabc/mcp-k8s/src/security"
 	"github.com/relaxyabc/mcp-k8s/src/tools"
 	"github.com/urfave/cli/v2"
 )
@@ -58,6 +59,10 @@ func main() {
 				Aliases: []string{"n"},
 				Usage:   "查询的默认命名空间 (单集群模式)",
 			},
+			&cli.BoolFlag{
+				Name:  "privileged",
+				Usage: "启用特权模式，禁用所有只读限制（警告：所有操作需用户确认后执行）",
+			},
 		},
 		Action: func(ctx *cli.Context) error {
 			return runMCPServer(ctx, log)
@@ -72,6 +77,17 @@ func main() {
 // runMCPServer 启动 MCP stdio 服务器
 func runMCPServer(ctx *cli.Context, log *logger.Logger) error {
 	log.Info("启动 k8s-mcp 服务器")
+
+	// 处理特权模式
+	if ctx.Bool("privileged") {
+		log.Warn("========================================")
+		log.Warn("  特权模式已启用！")
+		log.Warn("  所有安全限制已禁用")
+		log.Warn("  每个操作都需要用户确认后执行")
+		log.Warn("  所有操作将记录审计日志")
+		log.Warn("========================================")
+		security.SetPrivilegedMode(true)
+	}
 
 	clusterMgr, auditLogger, defaultNamespace, configPath, err := initializeCluster(ctx, log)
 	if err != nil {

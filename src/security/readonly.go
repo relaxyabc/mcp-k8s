@@ -4,6 +4,14 @@ import (
 	"strings"
 )
 
+// PrivilegedMode 全局特权模式开关
+var PrivilegedMode = false
+
+// SetPrivilegedMode 设置特权模式
+func SetPrivilegedMode(enabled bool) {
+	PrivilegedMode = enabled
+}
+
 // AllowedCommands Pod exec 操作允许的命令
 var AllowedCommands = []string{"cat", "tail", "head", "grep", "ls"}
 
@@ -15,6 +23,9 @@ var ForbiddenOutputOperators = []string{">", ">>"}
 
 // ValidateCommand 检查命令是否允许用于 Pod exec
 func ValidateCommand(command string) bool {
+	if PrivilegedMode {
+		return true // 特权模式允许所有命令
+	}
 	cmd := strings.ToLower(strings.TrimSpace(command))
 	for _, allowed := range AllowedCommands {
 		if cmd == allowed {
@@ -38,6 +49,9 @@ func getFirstWord(shellCmd string) string {
 
 // ValidateShellCommand 检查 shell 命令字符串是否安全
 func ValidateShellCommand(shellCmd string) bool {
+	if PrivilegedMode {
+		return true // 特权模式允许所有命令
+	}
 	// 只检查第一个单词（命令名）是否在禁止列表中
 	firstWord := getFirstWord(shellCmd)
 	for _, forbidden := range ForbiddenCommands {
@@ -68,6 +82,9 @@ func ValidateShellCommand(shellCmd string) bool {
 
 // IsReadOnlyVerb 检查 Kubernetes API 操作是否为只读
 func IsReadOnlyVerb(verb string) bool {
+	if PrivilegedMode {
+		return true // 特权模式跳过 verb 检查
+	}
 	readOnlyVerbs := []string{"get", "list", "watch"}
 	for _, v := range readOnlyVerbs {
 		if verb == v {

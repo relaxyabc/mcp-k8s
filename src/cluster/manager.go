@@ -6,6 +6,7 @@ import (
 
 	"github.com/relaxyabc/mcp-k8s/src/config"
 	"github.com/relaxyabc/mcp-k8s/src/k8s"
+	"github.com/relaxyabc/mcp-k8s/src/security"
 )
 
 // Manager manages multiple Kubernetes cluster connections
@@ -101,6 +102,11 @@ func (m *Manager) IsNamespaceAllowed(clusterName, namespace string) bool {
 // ValidateNamespace checks if namespace access is allowed for a cluster
 // Returns nil if allowed, or an error describing the restriction
 func (m *Manager) ValidateNamespace(clusterName, namespace string) error {
+	// 特权模式下跳过 namespace 检查
+	if security.PrivilegedMode {
+		return nil
+	}
+
 	cluster, err := m.GetCluster(clusterName)
 	if err != nil {
 		return err

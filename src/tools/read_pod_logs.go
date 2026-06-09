@@ -12,6 +12,7 @@ import (
 	"github.com/relaxyabc/mcp-k8s/src/cluster"
 	"github.com/relaxyabc/mcp-k8s/src/k8s"
 	"github.com/relaxyabc/mcp-k8s/src/mcp"
+	"github.com/relaxyabc/mcp-k8s/src/security"
 )
 
 // MakeReadPodLogsHandler 创建 read_pod_logs 工具处理器
@@ -31,6 +32,32 @@ func MakeReadPodLogsHandler(clusterMgr *cluster.Manager, auditLogger *audit.Logg
 			return api.NewErrorResponse(api.ErrInvalidInput, "namespace, podName, logDir 和 logFile 是必填字段"), nil
 		}
 
+		// 构建完整日志路径
+		logPath := p.LogDir + "/" + p.LogFile
+
+		// 特权模式确认流程
+		if security.PrivilegedMode {
+			if !p.Confirmed {
+				message := fmt.Sprintf("特权模式：即将在 Pod '%s' 中读取文件 '%s' (namespace: %s)", p.PodName, logPath, p.Namespace)
+				op := security.CreateConfirmation("read_pod_logs", p, message)
+				return api.NewConfirmationResponse(op.ID, p, message), nil
+			}
+			// 验证确认
+			if _, ok := security.ValidateConfirmation(p.OperationID); !ok {
+				return api.NewErrorResponse(api.ErrConfirmationExpired, "操作未确认或已过期，请重新发起请求"), nil
+			}
+			// 记录审计日志
+			defer auditLogger.LogPrivilegedOperation(ctx, &audit.PrivilegedOp{
+				Type:      "read_pod_logs",
+				Resource:  p.PodName,
+				Namespace: p.Namespace,
+				Cluster:   p.Cluster,
+				Details:   fmt.Sprintf("path=%s, operation=%s", logPath, p.Operation),
+				Confirmed: true,
+				Status:    "success",
+			})
+		}
+
 		// 获取集群
 		loadedCluster, err := clusterMgr.GetCluster(p.Cluster)
 		if err != nil {
@@ -38,10 +65,12 @@ func MakeReadPodLogsHandler(clusterMgr *cluster.Manager, auditLogger *audit.Logg
 			return api.NewErrorResponse(api.ErrClusterNotFound, fmt.Sprintf("%v。可用集群: %v", err, clusterMgr.ListClusters())), nil
 		}
 
-		// 验证 namespace 访问权限
-		if err := clusterMgr.ValidateNamespace(p.Cluster, p.Namespace); err != nil {
-			auditLogger.LogError("read_pod_logs", err.Error())
-			return api.NewErrorResponse(api.ErrNamespaceForbidden, err.Error()), nil
+		// 验证 namespace 访问权限 (特权模式下跳过)
+		if !security.PrivilegedMode {
+			if err := clusterMgr.ValidateNamespace(p.Cluster, p.Namespace); err != nil {
+				auditLogger.LogError("read_pod_logs", err.Error())
+				return api.NewErrorResponse(api.ErrNamespaceForbidden, err.Error()), nil
+			}
 		}
 
 		// 创建日志处理器
@@ -50,9 +79,6 @@ func MakeReadPodLogsHandler(clusterMgr *cluster.Manager, auditLogger *audit.Logg
 			return api.NewErrorResponse(api.ErrInternal, "客户端类型错误"), nil
 		}
 		handler := k8s.NewLogHandler(k8sClient)
-
-		// 构建完整日志路径
-		logPath := p.LogDir + "/" + p.LogFile
 
 		// 如果未指定则获取默认容器
 		container := p.Container

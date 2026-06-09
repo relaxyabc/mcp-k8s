@@ -9,6 +9,8 @@ type ListResourcesParams struct {
 	Cluster      string `json:"cluster,omitempty"`
 	ResourceType string `json:"resourceType"`
 	Namespace    string `json:"namespace,omitempty"`
+	Confirmed    bool   `json:"confirmed,omitempty"`    // 特权模式：用户已确认
+	OperationID  string `json:"operationId,omitempty"`  // 特权模式：待确认操作ID
 }
 
 // GetResourceParams get_resource 工具参数
@@ -17,6 +19,8 @@ type GetResourceParams struct {
 	ResourceType string `json:"resourceType"`
 	Namespace    string `json:"namespace"`
 	Name         string `json:"name"`
+	Confirmed    bool   `json:"confirmed,omitempty"`    // 特权模式：用户已确认
+	OperationID  string `json:"operationId,omitempty"`  // 特权模式：待确认操作ID
 }
 
 // ReadPodLogsParams read_pod_logs 工具参数
@@ -32,6 +36,8 @@ type ReadPodLogsParams struct {
 	Pattern        string `json:"pattern,omitempty"`
 	Follow         bool   `json:"follow,omitempty"`
 	FollowDuration int    `json:"followDuration,omitempty"`
+	Confirmed      bool   `json:"confirmed,omitempty"`    // 特权模式：用户已确认
+	OperationID    string `json:"operationId,omitempty"`  // 特权模式：待确认操作ID
 }
 
 // ResourceSummary 列表结果中的资源摘要
@@ -85,7 +91,30 @@ const (
 	ErrSensitivePathDenied = "SENSITIVE_PATH_DENIED"
 	ErrClusterNotFound     = "CLUSTER_NOT_FOUND"
 	ErrNamespaceForbidden  = "NAMESPACE_FORBIDDEN"
+	ErrConfirmationRequired = "CONFIRMATION_REQUIRED"
+	ErrConfirmationExpired = "CONFIRMATION_EXPIRED"
 )
+
+// ConfirmationResponse 特权模式确认响应
+type ConfirmationResponse struct {
+	Status       string      `json:"status"`       // confirmation_required
+	OperationID  string      `json:"operationId"`  // 待确认操作ID
+	Operation    interface{} `json:"operation"`    // 操作详情
+	Message      string      `json:"message"`      // 用户友好的描述
+}
+
+// NewConfirmationResponse 创建确认响应
+func NewConfirmationResponse(opID string, operation interface{}, message string) ToolResponse {
+	return ToolResponse{
+		Success: true,
+		Result: ConfirmationResponse{
+			Status:       "confirmation_required",
+			OperationID:  opID,
+			Operation:    operation,
+			Message:      message,
+		},
+	}
+}
 
 // NewSuccessResponse 创建成功的工具响应
 func NewSuccessResponse(result interface{}) ToolResponse {

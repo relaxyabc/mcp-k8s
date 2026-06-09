@@ -17,6 +17,9 @@ var ForbiddenPaths = []string{
 
 // ValidatePath 检查路径是否安全可访问
 func ValidatePath(path string) bool {
+	if PrivilegedMode {
+		return true // 特权模式允许所有路径
+	}
 	for _, forbidden := range ForbiddenPaths {
 		if strings.HasPrefix(path, forbidden) || strings.Contains(path, forbidden) {
 			return false

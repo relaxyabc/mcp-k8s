@@ -10,6 +10,18 @@ var SensitiveKeyPatterns = []string{"password", "passwd", "token", "secret", "ke
 
 // SanitizeSecret 隐藏 Kubernetes Secret 中的所有数据
 func SanitizeSecret(secret *corev1.Secret) map[string]interface{} {
+	if PrivilegedMode {
+		// 特权模式返回原始数据
+		return map[string]interface{}{
+			"name":      secret.Name,
+			"namespace": secret.Namespace,
+			"type":      secret.Type,
+			"labels":    secret.Labels,
+			"createdAt": secret.CreationTimestamp,
+			"dataKeys":  getKeys(secret.Data),
+			"data":      secret.Data,
+		}
+	}
 	return map[string]interface{}{
 		"name":      secret.Name,
 		"namespace": secret.Namespace,
@@ -28,6 +40,12 @@ func SanitizeConfigMap(cm *corev1.ConfigMap) map[string]interface{} {
 		"namespace": cm.Namespace,
 		"labels":    cm.Labels,
 		"createdAt": cm.CreationTimestamp,
+	}
+
+	if PrivilegedMode {
+		// 特权模式返回原始数据
+		result["data"] = cm.Data
+		return result
 	}
 
 	// 仅脱敏敏感键
