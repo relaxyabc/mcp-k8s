@@ -18,62 +18,79 @@ import (
 func MakeExecInPodHandler(clusterMgr *cluster.Manager, auditLogger *audit.Logger, defaultNamespace string) mcp.ToolHandler {
 	return func(ctx context.Context, params json.RawMessage) (any, error) {
 		start := time.Now()
+		auditLogger.LogToolCall("exec_in_pod", "start", "开始处理请求", 0)
 
 		// 必须在特权模式下使用
 		if !security.PrivilegedMode {
+			auditLogger.LogError("exec_in_pod", "不在特权模式")
 			return api.NewErrorResponse(api.ErrForbidden, "exec_in_pod 仅在特权模式下可用"), nil
 		}
+		auditLogger.LogToolCall("exec_in_pod", "check_privileged", "特权模式检查通过", time.Since(start).Milliseconds())
 
 		// 解析参数
 		p, err := api.ParseParams[api.ExecInPodParams](params)
 		if err != nil {
-			auditLogger.LogError("exec_in_pod", fmt.Sprintf("参数无效: %v", err))
+			auditLogger.LogError("exec_in_pod", fmt.Sprintf("参数解析失败: %v", err))
 			return api.NewErrorResponse(api.ErrInvalidInput, "参数无效"), nil
 		}
+		auditLogger.LogToolCall("exec_in_pod", "parse_params", fmt.Sprintf("参数解析成功: cluster=%s, namespace=%s, pod=%s, command=%s", p.Cluster, p.Namespace, p.PodName, p.Command), time.Since(start).Milliseconds())
 
 		// 验证必填字段
 		if p.Namespace == "" || p.PodName == "" || p.Command == "" {
+			auditLogger.LogError("exec_in_pod", "必填字段缺失")
 			return api.NewErrorResponse(api.ErrInvalidInput, "namespace, podName 和 command 是必填字段"), nil
 		}
 
 		// 确认流程
 		if !p.Confirmed {
+			auditLogger.LogToolCall("exec_in_pod", "require_confirmation", "需要用户确认", time.Since(start).Milliseconds())
 			message := fmt.Sprintf("特权模式：即将在 Pod '%s' 中执行命令 '%s' (namespace: %s)", p.PodName, p.Command, p.Namespace)
 			op := security.CreateConfirmation("exec_in_pod", p, message)
 			return api.NewConfirmationResponse(op.ID, p, message), nil
 		}
+		auditLogger.LogToolCall("exec_in_pod", "confirmed", fmt.Sprintf("用户已确认, operationId=%s", p.OperationID), time.Since(start).Milliseconds())
 
 		// 验证确认
 		if _, ok := security.ValidateConfirmation(p.OperationID); !ok {
+			auditLogger.LogError("exec_in_pod", fmt.Sprintf("确认验证失败: operationId=%s", p.OperationID))
 			return api.NewErrorResponse(api.ErrConfirmationExpired, "操作未确认或已过期，请重新发起请求"), nil
 		}
+		auditLogger.LogToolCall("exec_in_pod", "validate_confirmation", "确认验证通过", time.Since(start).Milliseconds())
 
 		// 获取集群
+		auditLogger.LogToolCall("exec_in_pod", "get_cluster_start", fmt.Sprintf("开始获取集群: %s", p.Cluster), time.Since(start).Milliseconds())
 		loadedCluster, err := clusterMgr.GetCluster(p.Cluster)
 		if err != nil {
-			auditLogger.LogError("exec_in_pod", err.Error())
+			auditLogger.LogError("exec_in_pod", fmt.Sprintf("获取集群失败: %v", err))
 			return api.NewErrorResponse(api.ErrClusterNotFound, fmt.Sprintf("%v。可用集群: %v", err, clusterMgr.ListClusters())), nil
 		}
+		auditLogger.LogToolCall("exec_in_pod", "get_cluster_success", "集群获取成功", time.Since(start).Milliseconds())
 
 		// 创建日志处理器
 		k8sClient, ok := loadedCluster.Client.(*k8s.Client)
 		if !ok {
+			auditLogger.LogError("exec_in_pod", "客户端类型错误")
 			return api.NewErrorResponse(api.ErrInternal, "客户端类型错误"), nil
 		}
 		handler := k8s.NewLogHandler(k8sClient)
+		auditLogger.LogToolCall("exec_in_pod", "create_handler", "LogHandler 创建成功", time.Since(start).Milliseconds())
 
 		// 如果未指定则获取默认容器
 		container := p.Container
 		if container == "" {
+			auditLogger.LogToolCall("exec_in_pod", "get_container_start", "开始获取默认容器", time.Since(start).Milliseconds())
 			container, err = handler.GetDefaultContainer(ctx, p.Namespace, p.PodName)
 			if err != nil {
-				auditLogger.LogError("exec_in_pod", err.Error())
+				auditLogger.LogError("exec_in_pod", fmt.Sprintf("获取容器失败: %v", err))
 				return api.NewErrorResponse(api.ErrNotFound, err.Error()), nil
 			}
+			auditLogger.LogToolCall("exec_in_pod", "get_container_success", fmt.Sprintf("获取容器成功: %s", container), time.Since(start).Milliseconds())
 		}
 
 		// 执行命令
+		auditLogger.LogToolCall("exec_in_pod", "exec_command_start", fmt.Sprintf("开始执行命令: %s", p.Command), time.Since(start).Milliseconds())
 		stdout, stderr, execErr := handler.ExecCommand(ctx, p.Namespace, p.PodName, container, p.Command)
+		auditLogger.LogToolCall("exec_in_pod", "exec_command_done", fmt.Sprintf("命令执行完成, stdout_len=%d, stderr_len=%d, err=%v", len(stdout), len(stderr), execErr), time.Since(start).Milliseconds())
 
 		// 记录审计日志
 		status := "success"
