@@ -50,40 +50,41 @@ func (s *Server) Start(ctx context.Context) error {
 	s.running = true
 	s.mu.Unlock()
 
-	s.log.Debug("server started, waiting for requests on stdin")
+	s.log.Info("server started, waiting for requests on stdin")
 
 	scanner := bufio.NewScanner(s.stdin)
 	for scanner.Scan() {
 		line := scanner.Bytes()
 		if len(line) == 0 {
-			s.log.Debug("received empty line, skipping")
+			s.log.Info("received empty line, skipping")
 			continue
 		}
 
-		s.log.Debug("received request", "content", string(line))
+		// 记录收到的原始请求
+		s.log.Info("received raw request", "content", string(line))
 
 		// 解析 JSON-RPC 请求
 		req, err := ParseRequest(line)
 		if err != nil {
-			s.log.Error("parse error", "error", err)
+			s.log.Error("parse error", "error", err, "raw", string(line))
 			s.writeError(nil, -32700, "Parse error")
 			continue
 		}
 
-		s.log.Debug("parsed request", "method", req.Method, "id", req.ID)
+		s.log.Info("parsed request", "method", req.Method, "id", req.ID)
 
 		// 处理请求
 		response := s.handleRequest(ctx, req)
 
 		// 通知类请求不需要响应
 		if response == nil {
-			s.log.Debug("no response needed for notification")
+			s.log.Info("no response needed for notification")
 			continue
 		}
 
 		// 写入响应
 		respBytes, _ := json.Marshal(response)
-		s.log.Debug("sending response", "content", string(respBytes))
+		s.log.Info("sending response", "content", string(respBytes))
 		if err := s.writeResponse(response); err != nil {
 			s.log.Error("write response error", "error", err)
 		}
@@ -94,7 +95,7 @@ func (s *Server) Start(ctx context.Context) error {
 		return fmt.Errorf("stdin scanner error: %w", err)
 	}
 
-	s.log.Debug("scanner ended, server shutting down")
+	s.log.Info("scanner ended, server shutting down")
 	return nil
 }
 
