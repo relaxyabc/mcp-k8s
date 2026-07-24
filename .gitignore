@@ -46,10 +46,18 @@ Thumbs.db
 *.log
 logs/
 
-# Project specific
-.specify/
+# Project specific (with exceptions for tracking)
+.specify/*
+!.specify/memory/
+!.specify/templates/
+!.specify/extensions.yml
+!.specify/init-options.json
+!.specify/feature.json
 .claude/
-specs/
+specs/*
+!specs/*/
+!specs/**/spec.md
+!specs/**/checklists/
 
 # Kubernetes secrets and kubeconfig
 *.kubeconfig
