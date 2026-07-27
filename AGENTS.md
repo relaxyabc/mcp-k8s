@@ -1,10 +1,11 @@
 # AGENTS.md
 
 ## 1. Project Overview
-- Kubernetes 只读 MCP (Model Context Protocol) 服务器，通过 stdio 与 MCP 客户端（如 Claude Code）通信
+- Kubernetes MCP (Model Context Protocol) 服务器，通过 stdio 与 MCP 客户端（如 Claude Code）通信
 - 支持**多集群配置**，通过 YAML/JSON 配置文件管理多个 K8s 集群
-- 提供 list_resources、get_resource、read_pod_logs 三个工具，供 AI Agent 安全地查询 K8s 集群状态
-- **不在本模块处理的内容**：任何 create/update/delete 操作、写文件、修改 K8s 资源
+- **默认模式（只读）**：list_resources、get_resource、read_pod_logs、download_file 四个工具
+- **特权模式（需 `--privileged` 启用）**：upload_file、exec_in_pod 两个工具
+- **不在本模块处理的内容**：任何 create/update/delete K8s 资源的操作
 
 ## 2. Working Principles
 - 先阅读相关规则和文档，理解上下文后再动手
@@ -22,8 +23,8 @@
 - 重构任务范围外的代码，无论看起来多"优雅"
 - 修改任务未涉及的目录或文件
 - 将敏感信息打印到日志
-- 修改 security 包中的只读验证逻辑以放宽限制
-- 在 Pod exec 中添加新的允许命令（仅限 cat/tail/head/grep/ls）
+- 修改 security 包中的安全验证逻辑以放宽限制（如修改敏感目录列表、文件大小限制）
+- 在默认模式下放宽 Pod exec 的命令白名单（仅允许 cat/tail/head/grep/ls）
 
 ### Ask First — 执行前必须获得用户明确确认
 - 安装新依赖——先确认现有依赖无法满足需求
@@ -50,22 +51,26 @@
 ```
 cmd/            # 可执行程序入口
 src/api/        # API 类型定义（请求/响应结构体）
-src/audit/      # 审计日志器
+src/audit/      # 审计日志器（特权操作审计）
 src/cluster/    # 集群管理器（多集群支持）
 src/config/     # 配置文件加载（YAML/JSON）
-src/k8s/        # Kubernetes 客户端、资源处理器、日志处理器
+src/k8s/        # Kubernetes 客户端、资源处理器、日志处理器、文件传输
 src/logger/     # 开发日志器
 src/mcp/        # MCP 协议实现（server、registry、protocol）
-src/security/   # 安全验证（只读检查、命令白名单、脱敏）
+src/security/   # 安全验证（特权模式、命令白名单、脱敏、路径验证）
 tests/          # 测试（helpers、integration）
 ```
 
 核心入口：
-- `cmd/main.go` — CLI 入口，注册 MCP 工具，多集群/单集群模式切换
+- `cmd/main.go` — CLI 入口，注册 MCP 工具，特权模式开关
 - `src/config/loader.go` — 配置文件加载，支持 YAML 和 JSON
 - `src/cluster/manager.go` — 集群管理器，namespace 白名单验证
 - `src/mcp/server.go` — MCP stdio 服务器核心
+- `src/security/privileged.go` — 特权模式验证
 - `src/security/readonly.go` — 只读命令白名单
+- `src/tools/upload_file.go` — 文件上传工具
+- `src/tools/download_file.go` — 文件下载工具
+- `src/tools/exec_in_pod.go` — Pod 命令执行工具
 
 ## 6. Code Style
 
@@ -87,6 +92,8 @@ tests/          # 测试（helpers、integration）
 |----------|---------------|
 | 代码逻辑（Go） | `go test ./src/[受影响包]/...` |
 | 代码逻辑（安全相关） | `go test ./src/security/...` |
+| 新增 MCP 工具 | `go test ./src/tools/...` |
+| 文件传输相关 | `go test ./src/k8s/... -run Upload|Download` |
 | 全量验证 | `go test ./...` |
 | 构建验证 | `go build ./cmd` |
 | Makefile 变更 | `make build` |
@@ -113,6 +120,12 @@ make build
 make test
 # Make 发布（linux + windows）
 make release
+
+# —— 运行 MCP 服务器 ——
+# 默认模式（只读）
+./k8s-mcp --config mcp-k8s-config.yaml
+# 特权模式（允许上传和执行命令）
+./k8s-mcp --config mcp-k8s-config.yaml --privileged
 ```
 
 ## 9. Output Format（每次任务完成必须输出以下内容）
