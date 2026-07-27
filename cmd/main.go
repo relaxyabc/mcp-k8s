@@ -148,7 +148,7 @@ func initMultiClusterMode(ctx *cli.Context, log *logger.Logger, configPath strin
 		log.Error("加载配置文件失败", "error", err)
 		return nil, nil, "", "", fmt.Errorf("加载配置文件失败: %w", err)
 	}
-	log.Info("配置文件加载成功", "clusters", len(cfg.Clusters), "default", cfg.DefaultCluster)
+	log.Info("配置文件加载成功", "clusters", len(cfg.Clusters))
 
 	clusterMgr, err := cluster.NewManager(cfg)
 	if err != nil {

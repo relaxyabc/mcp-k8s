@@ -45,6 +45,25 @@ type ExecInPodParams struct {
 	OperationID  string `json:"operationId,omitempty"` // 待确认操作ID
 }
 
+// UploadFileParams upload_file 工具参数
+type UploadFileParams struct {
+	LocalPath string `json:"localPath"`           // 本地文件路径（绝对路径）
+	PodName   string `json:"podName"`             // 目标 Pod 名称
+	Namespace string `json:"namespace"`           // 目标命名空间
+	TargetDir string `json:"targetDir"`           // Pod 内目标目录路径（绝对路径）
+	Cluster   string `json:"cluster"`             // 目标集群名称（必需）
+	FileName  string `json:"fileName,omitempty"`  // 可选：目标文件名
+}
+
+// DownloadFileParams download_file 工具参数
+type DownloadFileParams struct {
+	PodName    string `json:"podName"`    // 源 Pod 名称
+	Namespace  string `json:"namespace"`  // 源命名空间
+	RemotePath string `json:"remotePath"` // Pod 内文件路径（绝对路径）
+	LocalPath  string `json:"localPath"`  // 本地目标路径（绝对路径）
+	Cluster    string `json:"cluster"`    // 源集群名称（必需）
+}
+
 // ResourceSummary 列表结果中的资源摘要
 type ResourceSummary struct {
 	Name      string `json:"name"`
@@ -96,18 +115,26 @@ type ToolError struct {
 
 // 错误代码常量
 const (
-	ErrInvalidInput        = "INVALID_INPUT"
-	ErrNotFound            = "NOT_FOUND"
-	ErrForbidden           = "FORBIDDEN"
-	ErrUnauthorized        = "UNAUTHORIZED"
-	ErrInternal            = "INTERNAL_ERROR"
-	ErrTimeout             = "TIMEOUT"
-	ErrLogFileNotFound     = "LOG_FILE_NOT_FOUND"
-	ErrSensitivePathDenied = "SENSITIVE_PATH_DENIED"
-	ErrClusterNotFound     = "CLUSTER_NOT_FOUND"
-	ErrNamespaceForbidden  = "NAMESPACE_FORBIDDEN"
+	ErrInvalidInput         = "INVALID_INPUT"
+	ErrNotFound             = "NOT_FOUND"
+	ErrForbidden            = "FORBIDDEN"
+	ErrUnauthorized         = "UNAUTHORIZED"
+	ErrInternal             = "INTERNAL_ERROR"
+	ErrTimeout              = "TIMEOUT"
+	ErrLogFileNotFound      = "LOG_FILE_NOT_FOUND"
+	ErrSensitivePathDenied  = "SENSITIVE_PATH_DENIED"
+	ErrClusterNotFound      = "CLUSTER_NOT_FOUND"
+	ErrNamespaceForbidden   = "NAMESPACE_FORBIDDEN"
 	ErrConfirmationRequired = "CONFIRMATION_REQUIRED"
-	ErrConfirmationExpired = "CONFIRMATION_EXPIRED"
+	ErrConfirmationExpired  = "CONFIRMATION_EXPIRED"
+	ErrPrivilegedModeRequired = "PRIVILEGED_MODE_REQUIRED"
+	ErrClusterParameterRequired = "CLUSTER_PARAMETER_REQUIRED"
+	ErrFileTooLarge         = "FILE_TOO_LARGE"
+	ErrFileNotFound         = "FILE_NOT_FOUND"
+	ErrUploadFailed         = "UPLOAD_FAILED"
+	ErrDownloadFailed       = "DOWNLOAD_FAILED"
+	ErrBackupFailed         = "BACKUP_FAILED"
+	ErrPathNotAllowed       = "PATH_NOT_ALLOWED"
 )
 
 // ConfirmationResponse 特权模式确认响应

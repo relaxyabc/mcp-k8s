@@ -17,10 +17,9 @@ type LoggingConfig struct {
 
 // MCPConfig represents the complete MCP-K8s configuration
 type MCPConfig struct {
-	Version        string          `json:"version,omitempty" yaml:"version,omitempty"`
-	DefaultCluster string          `json:"defaultCluster,omitempty" yaml:"defaultCluster,omitempty"`
-	Logging        LoggingConfig   `json:"logging" yaml:"logging"`
-	Clusters       []ClusterConfig `json:"clusters" yaml:"clusters"`
+	Version  string        `json:"version,omitempty" yaml:"version,omitempty"`
+	Logging  LoggingConfig `json:"logging" yaml:"logging"`
+	Clusters []ClusterConfig `json:"clusters" yaml:"clusters"`
 }
 
 // LoadedCluster represents a cluster with its loaded Kubernetes client

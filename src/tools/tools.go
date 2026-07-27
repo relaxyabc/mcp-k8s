@@ -14,10 +14,11 @@ func RegisterAll(registry *mcp.Registry, clusterMgr *cluster.Manager, auditLogge
 	registerListResources(registry, clusterMgr, auditLogger, defaultNamespace)
 	registerGetResource(registry, clusterMgr, auditLogger, defaultNamespace)
 	registerReadPodLogs(registry, clusterMgr, auditLogger, defaultNamespace)
-	// 特权模式下注册 exec_in_pod 工具
-	if security.PrivilegedMode {
-		registerExecInPod(registry, clusterMgr, auditLogger, defaultNamespace)
-	}
+	// exec_in_pod 始终注册，但在非特权模式下调用时会返回错误
+	registerExecInPod(registry, clusterMgr, auditLogger, defaultNamespace)
+	// 注册上传和下载工具
+	registerUploadFile(registry, clusterMgr, auditLogger, defaultNamespace)
+	registerDownloadFile(registry, clusterMgr, auditLogger, defaultNamespace)
 }
 
 // registerListResources 注册 list_resources 工具
@@ -104,7 +105,7 @@ func registerReadPodLogs(registry *mcp.Registry, clusterMgr *cluster.Manager, au
 	)
 }
 
-// registerExecInPod 注册 exec_in_pod 工具（仅特权模式）
+// registerExecInPod 注册 exec_in_pod 工具
 func registerExecInPod(registry *mcp.Registry, clusterMgr *cluster.Manager, auditLogger *audit.Logger, defaultNamespace string) {
 	schema := json.RawMessage(`{
 		"type": "object",
@@ -113,16 +114,14 @@ func registerExecInPod(registry *mcp.Registry, clusterMgr *cluster.Manager, audi
 			"namespace": {"type": "string", "description": "Pod 所在 namespace"},
 			"podName": {"type": "string", "description": "Pod 名称"},
 			"container": {"type": "string", "description": "容器名称 (可选，默认第一个容器)"},
-			"command": {"type": "string", "description": "要执行的 shell 命令"},
-			"confirmed": {"type": "boolean", "description": "用户已确认执行此操作"},
-			"operationId": {"type": "string", "description": "待确认操作的 ID"}
+			"command": {"type": "string", "description": "要执行的 shell 命令"}
 		},
 		"required": ["namespace", "podName", "command"]
 	}`)
 
 	registry.Register(
 		"exec_in_pod",
-		"在 Pod 容器中执行任意 shell 命令。需要用户确认后执行",
+		"在 Pod 容器中执行任意 shell 命令。需要特权模式。",
 		schema,
 		MakeExecInPodHandler(clusterMgr, auditLogger, defaultNamespace),
 	)

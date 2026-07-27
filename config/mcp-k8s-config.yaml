@@ -1,8 +1,6 @@
 # MCP-K8s 多集群配置示例
 # 版本: 1.0
 
-# 默认集群 (可选，不指定时使用第一个集群)
-defaultCluster: "dev-cluster"
 
 # 日志配置 (可选)
 logging:

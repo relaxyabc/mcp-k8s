@@ -65,6 +65,17 @@ func (l *Logger) LogToolCall(toolName string, params any, result string, duratio
 	)
 }
 
+// LogToolCallPrivileged 记录特权模式的 MCP 工具调用日志
+func (l *Logger) LogToolCallPrivileged(toolName string, params any, result string, durationMs int64) {
+	l.Warn("tool_call",
+		"toolName", toolName,
+		"privileged", true,
+		"params", sanitizeParams(params),
+		"result", result,
+		"durationMs", durationMs,
+	)
+}
+
 // LogError 记录错误日志
 func (l *Logger) LogError(toolName string, message string) {
 	l.Error("tool_error",

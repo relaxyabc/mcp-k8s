@@ -75,16 +75,6 @@ func (c *MCPConfig) Validate() error {
 		seenNames[cluster.Name] = true
 	}
 
-	// Set default cluster if not specified
-	if c.DefaultCluster == "" {
-		c.DefaultCluster = c.Clusters[0].Name
-	}
-
-	// Verify default cluster exists
-	if !seenNames[c.DefaultCluster] {
-		return fmt.Errorf("默认集群 %q 不在集群列表中", c.DefaultCluster)
-	}
-
 	// Validate logging level if specified
 	if c.Logging.Level != "" {
 		validLevels := map[string]bool{"debug": true, "info": true, "warn": true, "error": true}

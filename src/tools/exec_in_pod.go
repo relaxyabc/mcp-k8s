@@ -14,7 +14,7 @@ import (
 	"github.com/relaxyabc/mcp-k8s/src/security"
 )
 
-// MakeExecInPodHandler 创建 exec_in_pod 工具处理器（仅特权模式）
+// MakeExecInPodHandler 创建 exec_in_pod 工具处理器
 func MakeExecInPodHandler(clusterMgr *cluster.Manager, auditLogger *audit.Logger, defaultNamespace string) mcp.ToolHandler {
 	return func(ctx context.Context, params json.RawMessage) (any, error) {
 		start := time.Now()
@@ -40,22 +40,6 @@ func MakeExecInPodHandler(clusterMgr *cluster.Manager, auditLogger *audit.Logger
 			auditLogger.LogError("exec_in_pod", "必填字段缺失")
 			return api.NewErrorResponse(api.ErrInvalidInput, "namespace, podName 和 command 是必填字段"), nil
 		}
-
-		// 确认流程
-		if !p.Confirmed {
-			auditLogger.LogToolCall("exec_in_pod", "require_confirmation", "需要用户确认", time.Since(start).Milliseconds())
-			message := fmt.Sprintf("特权模式：即将在 Pod '%s' 中执行命令 '%s' (namespace: %s)", p.PodName, p.Command, p.Namespace)
-			op := security.CreateConfirmation("exec_in_pod", p, message)
-			return api.NewConfirmationResponse(op.ID, p, message), nil
-		}
-		auditLogger.LogToolCall("exec_in_pod", "confirmed", fmt.Sprintf("用户已确认, operationId=%s", p.OperationID), time.Since(start).Milliseconds())
-
-		// 验证确认
-		if _, ok := security.ValidateConfirmation(p.OperationID); !ok {
-			auditLogger.LogError("exec_in_pod", fmt.Sprintf("确认验证失败: operationId=%s", p.OperationID))
-			return api.NewErrorResponse(api.ErrConfirmationExpired, "操作未确认或已过期，请重新发起请求"), nil
-		}
-		auditLogger.LogToolCall("exec_in_pod", "validate_confirmation", "确认验证通过", time.Since(start).Milliseconds())
 
 		// 获取集群
 		auditLogger.LogToolCall("exec_in_pod", "get_cluster_start", fmt.Sprintf("开始获取集群: %s", p.Cluster), time.Since(start).Milliseconds())

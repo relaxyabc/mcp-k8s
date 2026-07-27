@@ -27,6 +27,12 @@ func NewLogHandler(client *Client) *LogHandler {
 
 // ExecCommand 在 Pod 中执行 shell 命令（公共方法，供 exec_in_pod 使用）
 func (h *LogHandler) ExecCommand(ctx context.Context, namespace, podName, container, shellCmd string) (string, string, error) {
+	stdout, stderr, err := h.ExecCommandBytes(ctx, namespace, podName, container, shellCmd)
+	return stdout.String(), stderr.String(), err
+}
+
+// ExecCommandBytes 在 Pod 中执行 shell 命令，返回 bytes.Buffer（用于二进制数据）
+func (h *LogHandler) ExecCommandBytes(ctx context.Context, namespace, podName, container, shellCmd string) (*bytes.Buffer, *bytes.Buffer, error) {
 	// 添加默认超时（30秒），防止命令无限阻塞
 	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -34,13 +40,13 @@ func (h *LogHandler) ExecCommand(ctx context.Context, namespace, podName, contai
 	// 构建 exec URL
 	execURL, err := h.buildExecURL(namespace, podName, container, []string{"sh", "-c", shellCmd})
 	if err != nil {
-		return "", "", err
+		return nil, nil, err
 	}
 
 	// 创建 SPDY executor
 	executor, err := remotecommand.NewSPDYExecutor(h.client.Config(), "POST", execURL)
 	if err != nil {
-		return "", "", fmt.Errorf("创建 SPDY 执行器失败: %w", err)
+		return nil, nil, fmt.Errorf("创建 SPDY 执行器失败: %w", err)
 	}
 
 	var stdout, stderr bytes.Buffer
@@ -51,10 +57,10 @@ func (h *LogHandler) ExecCommand(ctx context.Context, namespace, podName, contai
 
 	// 处理超时错误
 	if errors.Is(timeoutCtx.Err(), context.DeadlineExceeded) {
-		return stdout.String(), stderr.String(), fmt.Errorf("命令执行超时 (30秒)")
+		return &stdout, &stderr, fmt.Errorf("命令执行超时 (30秒)")
 	}
 
-	return stdout.String(), stderr.String(), err
+	return &stdout, &stderr, err
 }
 
 // buildExecURL 构建完整的 exec URL，确保参数正确传递

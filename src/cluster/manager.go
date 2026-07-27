@@ -13,14 +13,14 @@ import (
 type Manager struct {
 	mu           sync.RWMutex
 	clusters     map[string]*config.LoadedCluster
-	defaultName  string
+	globalConfig *config.MCPConfig
 }
 
 // NewManager creates a new cluster manager from configuration
 func NewManager(cfg *config.MCPConfig) (*Manager, error) {
 	manager := &Manager{
-		clusters:    make(map[string]*config.LoadedCluster),
-		defaultName: cfg.DefaultCluster,
+		clusters:     make(map[string]*config.LoadedCluster),
+		globalConfig: cfg,
 	}
 
 	// Load all clusters
@@ -56,17 +56,16 @@ func NewSingleClusterManager(client *k8s.Client, kubeconfigPath, defaultNamespac
 				Client: client,
 			},
 		},
-		defaultName: "default",
 	}
 }
 
-// GetCluster returns a cluster by name, or the default cluster if name is empty
+// GetCluster returns a cluster by name (name is required, no default cluster)
 func (m *Manager) GetCluster(name string) (*config.LoadedCluster, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	if name == "" {
-		name = m.defaultName
+		return nil, fmt.Errorf("集群参数不能为空")
 	}
 
 	cluster, ok := m.clusters[name]
@@ -142,11 +141,4 @@ func (m *Manager) ListClusters() []string {
 		names = append(names, name)
 	}
 	return names
-}
-
-// DefaultCluster returns the default cluster name
-func (m *Manager) DefaultCluster() string {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.defaultName
 }
