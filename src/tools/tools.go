@@ -19,6 +19,11 @@ func RegisterAll(registry *mcp.Registry, clusterMgr *cluster.Manager, auditLogge
 	// 注册上传和下载工具
 	registerUploadFile(registry, clusterMgr, auditLogger, defaultNamespace)
 	registerDownloadFile(registry, clusterMgr, auditLogger, defaultNamespace)
+	// 注册写操作工具（特权模式专用）
+	registerApplyResource(registry, clusterMgr, auditLogger, defaultNamespace)
+	registerPatchResource(registry, clusterMgr, auditLogger, defaultNamespace)
+	registerDeleteResource(registry, clusterMgr, auditLogger, defaultNamespace)
+	registerRolloutRestart(registry, clusterMgr, auditLogger, defaultNamespace)
 }
 
 // registerListResources 注册 list_resources 工具
