@@ -40,7 +40,7 @@ func main() {
 
 	app := &cli.App{
 		Name:    "k8s-mcp",
-		Usage:   "Kubernetes 只读 MCP 服务器",
+		Usage:   "Kubernetes MCP 服务器（只读模式 + 特权写操作）",
 		Version: fullVersion,
 		Flags: []cli.Flag{
 			&cli.StringFlag{

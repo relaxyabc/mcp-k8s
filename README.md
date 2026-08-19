@@ -1,6 +1,6 @@
 # K8s MCP Server
 
-Kubernetes MCP (Model Context Protocol) 服务器，支持多集群配置、文件上传下载，通过 stdio 与 MCP 客户端通信。
+Kubernetes MCP (Model Context Protocol) 服务器，支持多集群配置、资源读写、文件传输，通过 stdio 与 MCP 客户端通信。
 
 ## 功能
 
@@ -15,6 +15,10 @@ Kubernetes MCP (Model Context Protocol) 服务器，支持多集群配置、文�
 ### 特权操作（需启用特权模式）
 - **upload_file**: 上传本地文件到 Pod（自动备份）
 - **exec_in_pod**: 在 Pod 容器中执行任意 shell 命令
+- **apply_resource**: 应用 YAML/JSON 清单到集群（Server-Side Apply），支持创建或更新资源
+- **patch_resource**: 对资源执行 Patch 操作（支持 merge patch 和 JSON patch）
+- **delete_resource**: 删除 Kubernetes 资源（⚠️ 破坏性操作）
+- **rollout_restart**: 滚动重启 Deployment/StatefulSet/DaemonSet
 
 ## 安全约束
 
@@ -28,7 +32,7 @@ Kubernetes MCP (Model Context Protocol) 服务器，支持多集群配置、文�
 
 ### 特权模式
 - 通过命令行参数 `--privileged` 启用
-- 允许文件上传和任意命令执行
+- 允许文件上传、任意命令执行、资源写操作（apply/patch/delete/rollout restart）
 - 禁止上传到敏感目录 (/etc/secrets, /root, ~/.ssh, /etc/ssh, /var/run/secrets)
 - 所有特权操作记录审计日志
 
@@ -249,6 +253,73 @@ k8s-mcp --kubeconfig ~/.kube/config --namespace default
 
 **注意**：执行命令需要启动时添加 `--privileged` 参数。
 
+### apply_resource（需要特权模式）
+
+应用 YAML/JSON 清单到 Kubernetes 集群（Server-Side Apply）：
+
+```json
+{
+  "cluster": "dev-cluster",       // 必需，目标集群名称
+  "manifest": "apiVersion: ...",  // 必需，YAML 或 JSON 资源清单
+  "namespace": "default",         // 可选，目标命名空间
+  "fieldManager": "k8s-mcp"       // 可选，Server-Side Apply 字段管理者名称
+}
+```
+
+**返回值：**
+```json
+{
+  "success": true,
+  "data": {
+    "kind": "Deployment",
+    "name": "my-app",
+    "namespace": "default",
+    "operation": "created"
+  }
+}
+```
+
+### patch_resource（需要特权模式）
+
+对 Kubernetes 资源执行 Patch 操作：
+
+```json
+{
+  "cluster": "dev-cluster",       // 必需，目标集群名称
+  "namespace": "default",         // 必需
+  "resourceType": "deployment",   // 必需，资源类型
+  "name": "my-app",               // 必需，资源名称
+  "patch": "{\"spec\":...}",      // 必需，JSON 格式的 patch 内容
+  "patchType": "merge"            // 可选：merge|json，默认 merge
+}
+```
+
+### delete_resource（需要特权模式）
+
+删除 Kubernetes 资源。⚠️ 破坏性操作，请谨慎使用：
+
+```json
+{
+  "cluster": "dev-cluster",       // 必需，目标集群名称
+  "namespace": "default",         // 必需
+  "resourceType": "deployment",   // 必需，资源类型
+  "name": "my-app"                // 必需，资源名称
+}
+```
+
+### rollout_restart（需要特权模式）
+
+滚动重启 Deployment/StatefulSet/DaemonSet：
+
+```json
+{
+  "cluster": "dev-cluster",       // 必需，目标集群名称
+  "namespace": "default",         // 必需
+  "resourceType": "deployment",   // 必需：deployment|statefulset|daemonset
+  "name": "my-app"                // 必需，资源名称
+}
+```
+
 ## MCP 客户端配置
 
 ### Claude Code
@@ -315,6 +386,15 @@ k8s-mcp --kubeconfig ~/.kube/config --namespace default
 
 # 执行命令（需要特权模式）
 "在 dev-cluster 集群 pod app-server 中执行 ls -la /tmp 命令"
+
+# 应用资源清单（需要特权模式）
+"将以下 YAML 部署到 dev-cluster 集群的 default 命名空间"
+
+# 滚动重启（需要特权模式）
+"重启 dev-cluster 集群 default 命名空间中的 deployment my-app"
+
+# 删除资源（需要特权模式）
+"删除 dev-cluster 集群 default 命名空间中的 deployment my-app"
 ```
 
 ## RBAC 要求
@@ -335,7 +415,7 @@ rules:
   verbs: ["get", "create"]
 ```
 
-### 完整权限（包含文件上传下载）
+### 完整权限（包含文件上传下载和写操作）
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -344,11 +424,14 @@ metadata:
   name: mcp-full
 rules:
 - apiGroups: ["", "apps", "batch"]
-  resources: ["pods", "deployments", "services", "jobs", "configmaps", "namespaces"]
-  verbs: ["get", "list"]
+  resources: ["pods", "deployments", "services", "jobs", "configmaps", "namespaces", "secrets", "statefulsets", "daemonsets", "replicasets", "cronjobs"]
+  verbs: ["get", "list", "create", "update", "patch", "delete"]
+- apiGroups: ["networking.k8s.io"]
+  resources: ["ingresses"]
+  verbs: ["get", "list", "create", "update", "patch", "delete"]
 - apiGroups: [""]
   resources: ["pods/exec", "pods/log"]
-  verbs: ["get", "create"]  # exec 权限用于文件上传下载
+  verbs: ["get", "create"]  # exec 权限用于文件上传下载和命令执行
 ```
 
 ## 技术栈
