@@ -135,6 +135,11 @@ const (
 	ErrDownloadFailed       = "DOWNLOAD_FAILED"
 	ErrBackupFailed         = "BACKUP_FAILED"
 	ErrPathNotAllowed       = "PATH_NOT_ALLOWED"
+	ErrApplyFailed          = "APPLY_FAILED"
+	ErrPatchFailed          = "PATCH_FAILED"
+	ErrDeleteFailed         = "DELETE_FAILED"
+	ErrRestartFailed        = "RESTART_FAILED"
+	ErrUnsupportedResource  = "UNSUPPORTED_RESOURCE"
 )
 
 // ConfirmationResponse 特权模式确认响应
@@ -184,4 +189,72 @@ func ParseParams[T any](raw json.RawMessage) (T, error) {
 		return params, err
 	}
 	return params, nil
+}
+
+// ========== 写操作参数（特权模式） ==========
+
+// ApplyResourceParams apply_resource 工具参数
+type ApplyResourceParams struct {
+	Cluster      string `json:"cluster"`
+	Namespace    string `json:"namespace"`
+	Manifest     string `json:"manifest"`               // YAML 或 JSON 清单
+	FieldManager string `json:"fieldManager,omitempty"` // 默认 "k8s-mcp"
+}
+
+// PatchResourceParams patch_resource 工具参数
+type PatchResourceParams struct {
+	Cluster      string `json:"cluster"`
+	Namespace    string `json:"namespace"`
+	ResourceType string `json:"resourceType"`
+	Name         string `json:"name"`
+	PatchType    string `json:"patchType,omitempty"` // "merge" 或 "json"，默认 "merge"
+	Patch        string `json:"patch"`               // JSON patch 内容
+}
+
+// DeleteResourceParams delete_resource 工具参数
+type DeleteResourceParams struct {
+	Cluster      string `json:"cluster"`
+	Namespace    string `json:"namespace"`
+	ResourceType string `json:"resourceType"`
+	Name         string `json:"name"`
+}
+
+// RolloutRestartParams rollout_restart 工具参数
+type RolloutRestartParams struct {
+	Cluster      string `json:"cluster"`
+	Namespace    string `json:"namespace"`
+	ResourceType string `json:"resourceType"` // deployment, statefulset, daemonset
+	Name         string `json:"name"`
+}
+
+// ========== 写操作结果 ==========
+
+// ApplyResult apply 操作结果
+type ApplyResult struct {
+	Kind      string `json:"kind"`
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+	Operation string `json:"operation"` // "created" 或 "updated"
+}
+
+// PatchResult patch 操作结果
+type PatchResult struct {
+	Kind      string `json:"kind"`
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+}
+
+// DeleteResult delete 操作结果
+type DeleteResult struct {
+	Kind      string `json:"kind"`
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+}
+
+// RestartResult rollout_restart 操作结果
+type RestartResult struct {
+	Kind        string `json:"kind"`
+	Name        string `json:"name"`
+	Namespace   string `json:"namespace"`
+	RestartedAt string `json:"restartedAt"`
 }
