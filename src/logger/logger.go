@@ -70,8 +70,13 @@ func NewLogger(level LogLevel, output *os.File) *Logger {
 }
 
 // NewDevelopmentLogger 创建开发环境的日志器（控制台输出）
+// 与 NewLogger 不同，此日志器使用控制台格式输出，适合开发调试
+// 注意：通过 AddStacktrace(ErrorLevel) 覆盖默认的 WarnLevel，避免 Warn 日志输出调用栈
 func NewDevelopmentLogger() *Logger {
-	zapLogger, _ := zap.NewDevelopment()
+	zapLogger, _ := zap.NewDevelopment(
+		zap.AddStacktrace(zapcore.ErrorLevel),
+		zap.AddCallerSkip(1),
+	)
 	return &Logger{
 		zap:   zapLogger.Sugar(),
 		level: zapcore.DebugLevel,
